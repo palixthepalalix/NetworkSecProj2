@@ -124,6 +124,7 @@ void handlePutRequest(char *fileName, int encrypted, char *pswd)
     //send file (with iv prepended if valid) and hash to server
     //send(sock, ciphertext, ciphLen, 0);
     //send(sock, hashBuff, sizeof(hashBuff), 0);
+    printf("transfer of %s complete", fileName);
 }
 
 void handleGetRequest(char *fileName, int encrypted, char *pswd)
@@ -137,6 +138,9 @@ void handleGetRequest(char *fileName, int encrypted, char *pswd)
     //if valid, write that shit to directory
     //not valid, display msg to user
     printf("handling get request\n");
+
+
+    printf("retrieval of %s complete", fileName);
 }
 
 int main(int argc, char **argv)
