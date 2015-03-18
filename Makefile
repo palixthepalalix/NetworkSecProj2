@@ -4,11 +4,12 @@
 
 CC=gcc
 CFLAGS=-I.
-DEPS = client_sockets.h hash.h aes.h rsa.h
-OBJCLNT = client.o hash.o aes.o
-OBJSER = server.o
+DEPS = hash.h aes.h
+OBJCL1 = client.o hash.o aes.o
+OBJSER = server.o aes.o rsa.o
+OBJCL2 = client2.o client_sockets.o hash.o aes.o rsa.o
 
-EXE = client server 
+EXE = client
 LIBS = -lcrypto
 
 
@@ -18,8 +19,12 @@ LIBS = -lcrypto
 
 all: $(EXE) 
 
-client1: $(OBJCLNT)
+client: $(OBJCL1)
 		gcc -o $@ $^ $(CFLAGS) $(LIBS)
+
+client2: $(OBJCL2)
+		gcc -o $@ $^ $(CFLAGS) $(LIBS)
+
 
 server: $(OBJSER) 
 		gcc -o $@ $^ $(CFLAGS) $(LIBS)

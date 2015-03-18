@@ -2,7 +2,7 @@
 #include <string.h>
 #include <stdlib.h>
 #include "hash.h"
-#include "libs/aes.h"
+#include "aes.h"
 
 #define DISK_IO_BUF_SIZE 4096
 
@@ -110,7 +110,7 @@ void handlePutRequest(char *fileName, int encrypted, char *pswd)
     fclose(f);
     printf("%s", ftext);
     //can only use hash on clic machines
-    //hash(buf, hashBuff);
+    hash(ftext, hashBuff);
 
     //if encrypted, use password as seed to random number generator
  
