@@ -6,10 +6,10 @@ CC=gcc
 CFLAGS=-I.
 DEPS = hash.h aes.h
 OBJCL1 = client.o hash.o aes.o
-OBJSER = server.o aes.o rsa.o
+OBJSER = server.o aes.o hash.o
 OBJCL2 = client2.o client_sockets.o hash.o aes.o rsa.o
 
-EXE = client
+EXE = client server
 LIBS = -lcrypto
 
 

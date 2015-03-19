@@ -3,12 +3,17 @@
 #include <stdlib.h>
 #include "hash.h"
 #include "aes.h"
+#include <sys/socket.h>
+#include <arpa/inet.h>
+#include <sys/types.h>
+#include <netdb.h>
+#include <unistd.h>
 
 #define DISK_IO_BUF_SIZE 4096
 
 static unsigned char *iv = "01234567890123456"; // make sure this is the right length?
-void handlePutRequest(char *fileName, int encrypted, char *pswd);
-void handleGetRequest(char *fileName, int encrypted, char *pswd);
+void handlePutRequest(char *fileName, int encrypted, char *pswd, int sock);
+void handleGetRequest(char *fileName, int encrypted, char *pswd, int sock);
 
 static void die(const char *msg)
 {
@@ -21,7 +26,33 @@ static void printError(const char *err)
     printf("ERROR: %s\n", err);
 }
 
-void parseRequest(char *request)
+int connect_to_server(char *address, char *port)
+{
+    int sockfd, n, portno;
+    struct sockaddr_in servaddr;
+    struct addrinfo hints, *servinfo, *p;
+    int rv;
+
+    bzero(&servaddr, sizeof servaddr);
+    memset(&hints, 0, sizeof hints);
+    hints.ai_family = AF_UNSPEC;
+    hints.ai_socktype = SOCK_STREAM;
+    hints.ai_flags = AI_PASSIVE;
+
+    if((rv = getaddrinfo(address, port, &hints, &servinfo)) != 0)
+        die("Addr info error");
+    sockfd = socket(servinfo->ai_family, servinfo->ai_socktype, servinfo->ai_protocol);
+    if(sockfd < 0)
+        die("socket() error");
+
+    servaddr.sin_family = AF_INET;
+    servaddr.sin_port = htons(portno);
+    if(connect(sockfd, servinfo->ai_addr, servinfo->ai_addrlen) < 0)
+        die("connect() error");
+    return sockfd;
+}
+
+void parseRequest(char *request, int sock)
 {
     char *token_seperators = "\t \r\n";
     char *method = "";
@@ -74,10 +105,14 @@ void parseRequest(char *request)
         printError("Valid modes are N and E");
         return;
     }
+    printf("trying to print request\n");
+    printf("%s\n", request);
+    send(1, request, strlen(request), 0);
+    printf("hi\n");
     if(putRequest)
-        handlePutRequest(requestFile, encrypted, pswd);
+        handlePutRequest(requestFile, encrypted, pswd, sock);
     else
-        handleGetRequest(requestFile, encrypted, pswd);
+        handleGetRequest(requestFile, encrypted, pswd, sock);
 }
 
 void makeKey(char *pswd, char *buf)
@@ -85,7 +120,7 @@ void makeKey(char *pswd, char *buf)
     strcpy(buf, "1234567890123456");
 }
 
-void handlePutRequest(char *fileName, int encrypted, char *pswd)
+void handlePutRequest(char *fileName, int encrypted, char *pswd, int sock)
 {
     //generate SHA256 hash of plaintext file
 
@@ -93,6 +128,7 @@ void handlePutRequest(char *fileName, int encrypted, char *pswd)
     unsigned char *ftext, hashBuff[2048/8];
     char *ciphertext, buf[2000], key[16];
     int ciphLen, fsize;
+    //send PUT {filename} {E or N}
     //make sure handling different directories
     //and handling binary and ascii files
     FILE *f;
@@ -127,7 +163,7 @@ void handlePutRequest(char *fileName, int encrypted, char *pswd)
     printf("transfer of %s complete", fileName);
 }
 
-void handleGetRequest(char *fileName, int encrypted, char *pswd)
+void handleGetRequest(char *fileName, int encrypted, char *pswd, int sock)
 {
 
     //recv file
@@ -149,6 +185,12 @@ int main(int argc, char **argv)
     if(argc < 3)
         die("USAGE exe {ip address} {port no}");
 
+    int sockfd;
+    //sockfd = connect_to_server(argv[1], argv[2]);
+    char b[20];
+    sprintf(b, "hiiiii", 7);
+    send(2, b, strlen(b), 0);
+
     printf(">>");
     while(1) {
         if(fgets(requestLine, sizeof(requestLine), stdin) == NULL)
@@ -158,7 +200,7 @@ int main(int argc, char **argv)
         stop = "stop";
         if(strcmp(requestLine, stop) == 0)
             break;
-        parseRequest(requestLine);
+        parseRequest(requestLine, sockfd);
         printf(">>");
     }
 
