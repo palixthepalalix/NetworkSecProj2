@@ -3,11 +3,11 @@
 # makefile
 
 CC=gcc
-CFLAGS=-I.
-DEPS = hash.h aes.h
-OBJCL1 = client.o hash.o aes.o
-OBJSER = server.o aes.o hash.o
-OBJCL2 = client2.o client_sockets.o hash.o aes.o rsa.o
+CFLAGS=-I. -g
+DEPS = hash.h aes.h shared.h
+OBJCL1 = client.o hash.o aes.o shared.o
+OBJSER = server.o aes.o hash.o shared.o
+OBJCL2 = hash.o
 
 EXE = client server
 LIBS = -lcrypto
@@ -22,7 +22,7 @@ all: $(EXE)
 client: $(OBJCL1)
 		gcc -o $@ $^ $(CFLAGS) $(LIBS)
 
-client2: $(OBJCL2)
+hash: $(OBJCL2)
 		gcc -o $@ $^ $(CFLAGS) $(LIBS)
 
 

@@ -8,8 +8,10 @@
 #include <sys/types.h>
 #include <netdb.h>
 #include <unistd.h>
+#include "shared.h"
 
 #define DISK_IO_BUF_SIZE 4096
+#define HASHSIZE 256  
 
 static unsigned char *iv = "01234567890123456"; // make sure this is the right length?
 void handlePutRequest(char *fileName, int encrypted, char *pswd, int sock);
@@ -29,11 +31,9 @@ static void printError(const char *err)
 int connect_to_server(char *address, char *port)
 {
     int sockfd, n, portno;
-    struct sockaddr_in servaddr;
     struct addrinfo hints, *servinfo, *p;
     int rv;
 
-    bzero(&servaddr, sizeof servaddr);
     memset(&hints, 0, sizeof hints);
     hints.ai_family = AF_UNSPEC;
     hints.ai_socktype = SOCK_STREAM;
@@ -45,12 +45,13 @@ int connect_to_server(char *address, char *port)
     if(sockfd < 0)
         die("socket() error");
 
-    servaddr.sin_family = AF_INET;
-    servaddr.sin_port = htons(portno);
     if(connect(sockfd, servinfo->ai_addr, servinfo->ai_addrlen) < 0)
         die("connect() error");
+    printf("connected to serer\n");
     return sockfd;
 }
+
+
 
 void parseRequest(char *request, int sock)
 {
@@ -60,6 +61,8 @@ void parseRequest(char *request, int sock)
     char *mode = "";
     char *pswd = "";
     int putRequest, encrypted;
+    char reqPack[200];
+    strcpy(reqPack, request);
 
     //use tokenizer to parse request line
     method = strtok(request, token_seperators);
@@ -106,8 +109,9 @@ void parseRequest(char *request, int sock)
         return;
     }
     printf("trying to print request\n");
-    printf("%s\n", request);
-    send(1, request, strlen(request), 0);
+    printf("%s\n", reqPack);
+    strcat(reqPack, "\n");
+    Send(sock, (void *)reqPack, strlen(reqPack));
     printf("hi\n");
     if(putRequest)
         handlePutRequest(requestFile, encrypted, pswd, sock);
@@ -141,12 +145,21 @@ void handlePutRequest(char *fileName, int encrypted, char *pswd, int sock)
     fseek(f, 0, SEEK_END);
     fsize = ftell(f);
     fseek(f, 0, SEEK_SET);
-    ftext = malloc(fsize + 1);
+    printf("filesize: %d\n", fsize);
+    unsigned int sendSize = htons(fsize + 1);
+    Send(sock, &sendSize, sizeof(unsigned int));
+
+    printf("b");
+    ftext = malloc(fsize + 1); 
+    printf("c");
     fread(ftext, fsize, 1, f);
     fclose(f);
-    printf("%s", ftext);
-    //can only use hash on clic machines
+    
     hash(ftext, hashBuff);
+    Send(sock, hashBuff, strlen(hashBuff));
+    if(!encrypted)
+        Send(sock, ftext, sendSize);
+    //can only use hash on clic machines
 
     //if encrypted, use password as seed to random number generator
  
@@ -159,7 +172,8 @@ void handlePutRequest(char *fileName, int encrypted, char *pswd, int sock)
     }
     //send file (with iv prepended if valid) and hash to server
     //send(sock, ciphertext, ciphLen, 0);
-    //send(sock, hashBuff, sizeof(hashBuff), 0);
+    //Send(sock, hashBuff, strlen(hashBuff));
+    printf("\nhash: %s\n", hashBuff);
     printf("transfer of %s complete", fileName);
 }
 
@@ -186,10 +200,7 @@ int main(int argc, char **argv)
         die("USAGE exe {ip address} {port no}");
 
     int sockfd;
-    //sockfd = connect_to_server(argv[1], argv[2]);
-    char b[20];
-    sprintf(b, "hiiiii", 7);
-    send(2, b, strlen(b), 0);
+    sockfd = connect_to_server(argv[1], argv[2]);
 
     printf(">>");
     while(1) {
@@ -200,6 +211,7 @@ int main(int argc, char **argv)
         stop = "stop";
         if(strcmp(requestLine, stop) == 0)
             break;
+        printf("parsing request: %s\n", requestLine);
         parseRequest(requestLine, sockfd);
         printf(">>");
     }
