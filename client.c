@@ -98,6 +98,7 @@ void parseRequest(char *request, int sock)
             printError("Missing parameters,  \"E\" requires password\n");
             return;
         }
+        pswd[strlen(pswd)] = '\0';
         encrypted = 1;
     }
     else if (strcmp(mode, "N") == 0) {
@@ -130,7 +131,7 @@ void handlePutRequest(char *fileName, int encrypted, char *pswd, int sock)
 
     printf("handling put request\n");
     unsigned char *ftext, hashBuff[2048/8];
-    char *ciphertext, buf[2000], key[16];
+    char *ciphertext, buf[2000];
     int ciphLen, fsize;
     //send PUT {filename} {E or N}
     //make sure handling different directories
@@ -147,7 +148,7 @@ void handlePutRequest(char *fileName, int encrypted, char *pswd, int sock)
     fseek(f, 0, SEEK_SET);
     printf("filesize: %d\n", fsize);
     unsigned int sendSize = htons(fsize + 1);
-    Send(sock, &sendSize, sizeof(unsigned int));
+    //Send(sock, &sendSize, sizeof(unsigned int));
 
     printf("b");
     ftext = malloc(fsize + 1); 
@@ -157,18 +158,26 @@ void handlePutRequest(char *fileName, int encrypted, char *pswd, int sock)
     
     hash(ftext, hashBuff);
     Send(sock, hashBuff, strlen(hashBuff));
-    if(!encrypted)
+    if(!encrypted) {
+        Send(sock, &sendSize, sizeof(unsigned int));
         Send(sock, ftext, sendSize);
-    //can only use hash on clic machines
-
-    //if encrypted, use password as seed to random number generator
- 
-    if(encrypted) {
+    }
+    else if(encrypted) {
         //encrypt this shit
-        makeKey(pswd, key);
+        char *k = randomNum("hello");;
+        printf("password: %s\n", pswd);
         ciphertext = malloc(fsize + 256); // size of file plus aes block size
         //gotta prepend that mutha fuggin IV
-        //ciphLen = aes(key, ftext, strlen(buf), ciphertext, 1);
+        ciphLen = aes(k, ftext, fsize, ciphertext, 1);
+        sendSize = htons(ciphLen+1);
+        
+        printf("ciphlen %d\n", ciphLen);
+        Send(sock, &sendSize, sizeof(unsigned int));
+        //Send(sock, ciphertext, ciphLen);
+        int p = Send(sock, ciphertext, ciphLen);
+        char *d = malloc(ciphLen);
+        aes(k, ciphertext, ciphLen, d, 0);
+        printf("decrypt\n%s\n", d);
     }
     //send file (with iv prepended if valid) and hash to server
     //send(sock, ciphertext, ciphLen, 0);
@@ -206,7 +215,7 @@ int main(int argc, char **argv)
     while(1) {
         if(fgets(requestLine, sizeof(requestLine), stdin) == NULL)
             printError("something wrong with getting stdin");
-        requestLine[strlen(requestLine) - 1] = '\0';
+        requestLine[strlen(requestLine)] = '\0';
         char *stop;
         stop = "stop";
         if(strcmp(requestLine, stop) == 0)

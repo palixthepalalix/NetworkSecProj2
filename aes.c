@@ -94,17 +94,14 @@ int aes_encrypt(char *key, char *message, unsigned char *cipherBuff)
 int aes(char *key, unsigned char *changetext, int text_len, unsigned char *buffer, int do_encrypt)
 {
   
-    char *p = "1234567890123456";
- 
-
     ERR_load_crypto_strings();
     OpenSSL_add_all_algorithms();
     OPENSSL_config(NULL);
     int result_len;
     if(do_encrypt)
-        result_len = encrypt(changetext, text_len,  p, iv, buffer);
+        result_len = encrypt(changetext, text_len,  key, iv, buffer);
     else {
-        result_len = decrypt(changetext, text_len, p, iv, buffer);
+        result_len = decrypt(changetext, text_len, key, iv, buffer);
         buffer[result_len] = '\0';
     }
 
@@ -116,7 +113,6 @@ int aes_decrypt(char *key, unsigned char *ciphertext, int cipherlen, unsigned ch
 {
 
    
-    char *p = "1234567890123456";
   
  
    // ERR_load_crypto_strings();

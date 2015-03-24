@@ -42,7 +42,7 @@ int create_client_sock(int portno)
     return sockfd;
 }    
 
-
+/*
 void RecvFile(char *filename, int clntsock)
 {
     unsigned int sizeNet, size;
@@ -65,6 +65,7 @@ void RecvFile(char *filename, int clntsock)
     
     free(data);
 }
+*/
 
 void handleRequest(char *request, int sock)
 {
@@ -93,7 +94,7 @@ void handleRequest(char *request, int sock)
     else {
         isEnc = 1;
     }
-    RecvFile(requestFile, sock);
+    RecvFile(requestFile, sock, isEnc, pswd);
     
 }
 
@@ -151,7 +152,7 @@ int main(int argc, char **argv)
             else {
                 isEnc = 1;
             }
-            RecvFile(requestFile, clntSock);
+            RecvFile(requestFile, clntSock, isEnc, pswd);
             
             printf("done handling clnt\n");
         }
