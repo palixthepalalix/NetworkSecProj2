@@ -36,6 +36,11 @@ void print_cn_name(const char* label, X509_NAME* const name);
 #define PRIVATE_KEY "sprivate.pem"
 #define CERTIFICATE "scert.pem"
 
+static void printError(const char *err)
+{
+    printf("ERROR: %s\n", err);
+}
+
 
 int connect_to_server(char *address, char *port)
 {
