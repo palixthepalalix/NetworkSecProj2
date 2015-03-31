@@ -280,6 +280,7 @@ int main(int argc,char **argv)
         printf("comm name does not match host name");
 */
 
+    char requestLine[1000];
     printf(">>");
     while(1) {
         if(fgets(requestLine, sizeof(requestLine), stdin) == NULL)

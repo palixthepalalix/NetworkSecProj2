@@ -5,6 +5,7 @@
 #include <string.h>
 #include "hash.h"
 #include <stdlib.h>
+#include <openssl/ssl.h>
 
 
 char *randomNum(char *pswd)
@@ -64,7 +65,7 @@ int validateHash(char hashval[], char *data)
         return 1;
     return 0;
 }
-
+/*
 void RecvFile(char *filename, int sock, int encrypted, char *pswd)
 {
     unsigned int sizeNet, size;
@@ -99,6 +100,7 @@ void RecvFile(char *filename, int sock, int encrypted, char *pswd)
     fclose(writef);
     free(data);
 }
+*/
 /*
 int main()
 {

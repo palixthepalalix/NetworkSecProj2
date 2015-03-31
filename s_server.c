@@ -211,11 +211,10 @@ int main(int argc,char **argv)
         
         //handshake on server
         SSL_accept(ssl);
-        char buf[1000];
-        while(SSL_read(ssl, buf, sizeof(buf) - 1) > 0) {
+        char request[1000];
+        while(SSL_read(ssl, request, sizeof(request) - 1) > 0) {
             if(strlen(request) < 1)
                 continue;
-            request[y] = '\0'; 
             printf("request: %s\n", request);
             int isPut, isEnc;
             char *token_seperators = "\t \r\n";

@@ -3,15 +3,15 @@
 # makefile
 
 CC=gcc
-CFLAGS=-I. -g
-DEPS = hash.h aes.h shared.h
-OBJCL1 = client.o hash.o aes.o shared.o
-OBJSER = server.o aes.o hash.o shared.o
-OBJCL2 = hash.o
-OBJTEST = test.o aes.o hash.o shared.o
+CFLAGS=-I.
+DEPS = aes.h hash.h shared.h
+OBJCL1 = openssl-bio-fetch.o
+OBJSER = openssl-server.o
+OBJsserv = s_server.o aes.o hash.o shared.o
+OBJcli = s_client.o aes.o hash.o shared.o
 
-EXE = client server
-LIBS = -lcrypto
+EXE = s_server s_client
+LIBS = -lcrypto -lssl
 
 
 
@@ -20,19 +20,29 @@ LIBS = -lcrypto
 
 all: $(EXE) 
 
-client: $(OBJCL1)
+openssl-bio-fetch: $(OBJCL1)
 		gcc -o $@ $^ $(CFLAGS) $(LIBS)
 
-test: $(OBJTEST)
+openssl-server: $(OBJSER)
 		gcc -o $@ $^ $(CFLAGS) $(LIBS)
 
-hash: $(OBJCL2)
+s_server: $(OBJsserv)
 		gcc -o $@ $^ $(CFLAGS) $(LIBS)
 
+s_client: $(OBJcli)
+		gcc -o $@ $^ $(CFLAGS) $(LIBS)
 
 server: $(OBJSER) 
 		gcc -o $@ $^ $(CFLAGS) $(LIBS)
 
+csr: 
+		openssl req -new -nodes -keyout sprivate.pem -out srequest.csr -days 365
+
+cert: ca csr
+		openssl x509 -req -days 500 -in srequest.csr -CA rootCA.pem -CAkey rootCA.key -out scert.pem
+
+ca:
+		openssl req -new -x509 -days 3650 -extensions v3_ca -keyout rootCA.key -out rootCA.pem 
 
 .PHONY: clean
 
