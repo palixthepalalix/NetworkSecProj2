@@ -31,6 +31,9 @@ const char *PREFERRED_CIPHERS = "HIGH:!aNULL:!kRSA:!SRP:!PSK:!CAMELLIA:!RC4:!MD5
 int verify_callback(int preverify, X509_STORE_CTX* x509_ctx);
 void print_san_name(const char* label, X509* const cert);
 void print_cn_name(const char* label, X509_NAME* const name);
+void handlePut(char *fileName, int encrypted, char *pswd, SSL *ssl);
+void handleGet(char *fileName, int encrypted, char *pswd, SSL *ssl);
+
 #define HOSTNAME "www.random.org"
 #define HOST_RESOURCE "/cgi-bin/randbyte?nbytes=32&format=h"
 #define PRIVATE_KEY "sprivate.pem"
@@ -137,9 +140,9 @@ void parseRequest(char *request, SSL *ssl)
     Send(ssl, (void *)reqPack, strlen(reqPack));
     printf("hi\n");
     if(putRequest)
-        handlePutRequest(requestFile, encrypted, pswd, ssl);
+        handlePut(requestFile, encrypted, pswd, ssl);
     else
-        handleGetRequest(requestFile, encrypted, pswd, ssl);
+        handleGet(requestFile, encrypted, pswd, ssl);
 }
 
 void makeKey(char *pswd, char *buf)
@@ -147,9 +150,10 @@ void makeKey(char *pswd, char *buf)
     strcpy(buf, "1234567890123456");
 }
 
-void handlePutRequest(char *fileName, int encrypted, char *pswd, SSL *ssl)
+void handlePut(char *fileName, int encrypted, char *pswd, SSL *ssl)
 {
     //generate SHA256 hash of plaintext file
+    chdir("clientfiles");
 
     printf("handling put request\n");
     unsigned char *ftext, hashBuff[2048/8];
@@ -186,8 +190,9 @@ void handlePutRequest(char *fileName, int encrypted, char *pswd, SSL *ssl)
     }
     else if(encrypted) {
         //encrypt this shit
-        char *key;
-        key = getrand(pswd);
+        char *key = malloc(16 * sizeof(char *) + 1);;
+        //randKey(pswd, key);
+        strcpy(key, "1234567890123456");
         
         printf("password: %s\n", pswd);
         ciphertext = malloc(fsize + 256); // size of file plus aes block size
@@ -208,12 +213,69 @@ void handlePutRequest(char *fileName, int encrypted, char *pswd, SSL *ssl)
     //Send(sock, hashBuff, strlen(hashBuff));
     printf("\nhash: %s\n", hashBuff);
     printf("transfer of %s complete", fileName);
+    chdir("../");
 }
 
-void handleGetRequest(char *fileName, int encrypted, char *pswd, SSL *ssl)
+void handleGet(char *fileName, int encrypted, char *pswd, SSL *ssl)
 {
 
-    //recv file
+    //recv hash file
+    char hashBuf[2048/8];
+    int x = Recv(ssl, hashBuf, 65);
+    //hashBuf[x] = '\0';
+    printf("recieved hash %s", hashBuf);
+    
+    //recv size of file data
+    unsigned int sizeNet, size;
+    Recv(ssl, &sizeNet, sizeof(unsigned int));
+    size = ntohs(sizeNet);
+    printf("received size %d\n", size);
+
+    //recv file data
+    char *data;
+    data = malloc(size);
+    Recv(ssl, data, size);
+    printf("recieved data %s\n", data);
+
+    if(encrypted) {
+        char *d = malloc(size);
+        aes("1234567890123456", data, size, d, 0);
+        printf("decrypt\n%s\n", d);
+        //decrypt
+        bzero(data, sizeof(data));
+        strcpy(data, d);
+    }
+    char datahash[2048/8];
+    hash(data, datahash);
+    int isValid = 1;
+    int i;
+    int slen = strlen(datahash);
+    for(i = 0; i<slen; i++) {
+        if(datahash[i] != hashBuf[i]) {
+            printf("%c %d\n", datahash[i], i);
+            isValid = 0;
+            break;
+        }
+    }
+    if(isValid == 1) {
+        printf("valid\n");
+    }
+    printf("%s\n", datahash);
+    printf("%s\n", hashBuf);
+    //now compare hashes of data
+
+
+    if(isValid) {
+        chdir("clientfiles");
+        FILE *f = fopen(fileName, "wb");
+        fwrite(data, size, 1, f);
+        fclose(f);
+        chdir("../");
+    }
+
+    free(data);
+
+
     //decrypt if need be
     //compute hash
     //hash(txt, buf)

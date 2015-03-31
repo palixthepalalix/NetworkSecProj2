@@ -43,7 +43,7 @@ int create_client_sock(int portno)
     struct sockaddr_in serv_addr;
     sockfd = socket(AF_INET, SOCK_STREAM, 0);
     if(sockfd<0) {
-        exit(1);
+        die("socket error");
     }
     bzero((char *)&serv_addr, sizeof(serv_addr));
 
@@ -51,12 +51,13 @@ int create_client_sock(int portno)
     serv_addr.sin_addr.s_addr = INADDR_ANY;
     serv_addr.sin_port = htons(portno);
     if(bind(sockfd, (struct sockaddr *) &serv_addr, sizeof(serv_addr)) < 0)
-        exit(1);
+        die("bind() error");
     return sockfd;
 }
 
 void handlePut(char *filename, SSL *ssl)
 {
+    chdir("serverfiles");
     unsigned int sizeNet, size;
     char *data, hashBuf[2048/8];
     // recv SHA256 of data
@@ -74,7 +75,7 @@ void handlePut(char *filename, SSL *ssl)
 
     //now write the data to file
     FILE *writef = fopen(filename, "wb");
-    fwrite(data, size, 1, writef);
+    fwrite(data, size-1, 1, writef);
     fclose(writef);
     free(data);
 
@@ -86,6 +87,40 @@ void handlePut(char *filename, SSL *ssl)
     FILE *sha256 = fopen(shafile, "wb");
     fwrite(hashBuf, 64, 1, sha256);
     fclose(sha256);
+    chdir("../");
+}
+
+void handleGet(char *filename, SSL *ssl)
+{
+    chdir("serverfiles");
+    char shafile[strlen(filename) + strlen(".sha256")];
+    char *data;
+    strcpy(shafile, filename);
+    strcat(shafile, ".sha256");
+    //write hash to {filename}.sha256
+    FILE *sha256 = fopen(shafile, "rb");
+    char hashBuf[2048/8];
+    fgets(hashBuf, 70, sha256);
+    fclose(sha256);
+    hashBuf[64] = '\0';
+    printf("hash buf %s\n", hashBuf);
+
+    FILE *f = fopen(filename, "rb");
+    int fsize;
+    fseek(f, 0, SEEK_END);
+    fsize = ftell(f);
+    fseek(f, 0, SEEK_SET);
+    unsigned int sendSize = htons(fsize + 1);
+    
+    data = malloc(fsize + 1);
+    fread(data, fsize, 1, f);
+    fclose(f);
+    Send(ssl, hashBuf, strlen(hashBuf));
+    Send(ssl, &sendSize, sizeof( unsigned int ));
+    Send(ssl, data, sendSize);
+    free(data);
+    chdir("../");
+ 
 }
 
 void handleRequest(char *request, SSL *ssl)
@@ -129,7 +164,8 @@ void init_libs() {
     OPENSSL_config(NULL);
 }
 void die(char *msg) {
-    printf("%s\n", msg);
+    perror( msg);
+    exit(1);
 }
 
 
@@ -196,13 +232,15 @@ int main(int argc,char **argv)
 
     //SSL_set_session_id_context(ssl, sid, 4);
     //sbio = BIO_new_ssl(ctx, 0);
-    listen(sock, 5);
+    if(listen(sock, 5) < 0)
+        die("listen() failed");
     for(;;) {
+        printf("back to accepting\n");
         struct sockaddr_in client_addr;
         int clntlen, clntSock;
         clntSock = accept(sock, (struct sockaddr *)&client_addr, (socklen_t *)&clntlen);
         if(clntSock < 0)
-            exit(1);
+            die("failed accept");
         printf("accepted client\n");
 
         sbio = BIO_new(BIO_s_socket());
@@ -212,8 +250,10 @@ int main(int argc,char **argv)
         //handshake on server
         SSL_accept(ssl);
         char request[1000];
-        while(SSL_read(ssl, request, sizeof(request) - 1) > 0) {
-            if(strlen(request) < 1)
+        int s = 0;
+        while((s = SSL_read(ssl, request, sizeof(request) - 1)) > 0) {
+            request[s] = '\0';
+            if(strlen(request) != s)
                 continue;
             printf("request: %s\n", request);
             int isPut, isEnc;
@@ -240,7 +280,10 @@ int main(int argc,char **argv)
             else {
                 isEnc = 1;
             }
-            handlePut(requestFile, ssl);
+            if(isPut) 
+                handlePut(requestFile, ssl);
+            else
+                handleGet(requestFile, ssl);
             
             printf("done handling clnt\n");
         }

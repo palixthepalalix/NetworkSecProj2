@@ -8,9 +8,8 @@
 #include <openssl/ssl.h>
 
 
-char *randomNum(char *pswd)
+char *randKey(char *pswd, char *k)
 {
-    char *randnum = malloc(16 * sizeof(char*) + 1);
     
     int i, len;
     int seed = atoi(pswd);
@@ -20,11 +19,11 @@ char *randomNum(char *pswd)
         int r = rand() % 10;
         char buf[2];
         sprintf(buf, "%d", r);
-        strcat(randnum, buf);
+        strcat(k, buf);
     }
-    randnum[16] = '\0';
-    printf("key\n%s\n", randnum);
-    return randnum;
+    k[16] = '\0';
+    printf("key\n%s\n", k);
+    return k;
 }
 
 int Recv(SSL *ssl, void *buf, int size)
