@@ -70,28 +70,155 @@ void die(char *msg) {
     printf("%s\n", msg);
 }
 
-
-typedef struct connection {
-    BIO *read;
-    BIO *write;
-    SSL *ssl;
-    SSL_CTX *ctx;
-} connection;
-
-void handle_send(connection *sender, connection *receiver)
+void parseRequest(char *request, SSL *ssl)
 {
-    char buffer[1024];
-    int read = BIO_read(sender->write, buffer, 1024);
-    int written = read > 0 ? BIO_write(receiver->read, buffer, read) : -1;
+    char *token_seperators = "\t \r\n";
+    char *method = "";
+    char *requestFile = "";
+    char *mode = "";
+    char *pswd = "";
+    int putRequest, encrypted;
+    char reqPack[200];
+    strcpy(reqPack, request);
 
-    if(written > 0) {
-        if(!SSL_is_init_finished(receiver->ssl))
-            SSL_do_handshake(receiver->ssl);
-        else {
-            read = SSL_read(receiver->ssl, buffer, 1024);
-            printf("message: %s\n", buffer);
-        }
+    //use tokenizer to parse request line
+    method = strtok(request, token_seperators);
+    requestFile = strtok(NULL, token_seperators);
+    mode = strtok(NULL, token_seperators);
+    pswd = strtok(NULL, token_seperators);
+
+    // make sure minumum fields are specified
+    if(method == NULL || requestFile == NULL || mode == NULL) {
+        printError("Missing parameters, a minimum of a filename and \"N\" or \"E\" is required");
+        return;
     }
+
+    //get request type
+    if(strcmp(method, "get") == 0) {
+        printf("get request\n");
+        putRequest = 0;
+    }
+    else if(strcmp(method, "put") == 0) {
+        printf("put request\n");
+        putRequest = 1;
+    }
+    else {
+        printError("Invalid commands, options are \"get\" \"put\" \"stop\"");
+        return;
+    }
+
+    //get mode type
+    if(strcmp(mode, "E") == 0) {
+        printf("encrypt mode\n");
+        if(pswd == NULL) {
+            //make sure password is specified when in E mode
+            printError("Missing parameters,  \"E\" requires password\n");
+            return;
+        }
+        pswd[strlen(pswd)] = '\0';
+        encrypted = 1;
+    }
+    else if (strcmp(mode, "N") == 0) {
+        printf("no encryption\n");
+        encrypted = 0;
+    }
+    else {
+        printError("Valid modes are N and E");
+        return;
+    }
+    printf("trying to print request\n");
+    printf("%s\n", reqPack);
+    strcat(reqPack, "\n");
+    Send(ssl, (void *)reqPack, strlen(reqPack));
+    printf("hi\n");
+    if(putRequest)
+        handlePutRequest(requestFile, encrypted, pswd, ssl);
+    else
+        handleGetRequest(requestFile, encrypted, pswd, ssl);
+}
+
+void makeKey(char *pswd, char *buf)
+{
+    strcpy(buf, "1234567890123456");
+}
+
+void handlePutRequest(char *fileName, int encrypted, char *pswd, SSL *ssl)
+{
+    //generate SHA256 hash of plaintext file
+
+    printf("handling put request\n");
+    unsigned char *ftext, hashBuff[2048/8];
+    char *ciphertext, buf[2000];
+    int ciphLen, fsize;
+    //send PUT {filename} {E or N}
+    //make sure handling different directories
+    //and handling binary and ascii files
+    FILE *f;
+    f = fopen(fileName, "rb");
+    if(f == NULL) {
+        printError("File cannot be transferred");
+        return;
+    }
+    int n;
+    fseek(f, 0, SEEK_END);
+    fsize = ftell(f);
+    fseek(f, 0, SEEK_SET);
+    printf("filesize: %d\n", fsize);
+    unsigned int sendSize = htons(fsize + 1);
+    //Send(sock, &sendSize, sizeof(unsigned int));
+
+    printf("b");
+    ftext = malloc(fsize + 1); 
+    printf("c");
+    fread(ftext, fsize, 1, f);
+    fclose(f);
+    
+    hash(ftext, hashBuff);
+    Send(ssl, hashBuff, strlen(hashBuff));
+    if(!encrypted) {
+        Send(ssl, &sendSize, sizeof(unsigned int));
+        Send(ssl, ftext, sendSize);
+    }
+    else if(encrypted) {
+        //encrypt this shit
+        char *key;
+        key = getrand(pswd);
+        
+        printf("password: %s\n", pswd);
+        ciphertext = malloc(fsize + 256); // size of file plus aes block size
+        //gotta prepend that mutha fuggin IV
+        ciphLen = aes(key, ftext, fsize, ciphertext, 1);
+        sendSize = htons(ciphLen+1);
+        
+        printf("ciphlen %d\n", ciphLen);
+        Send(ssl, &sendSize, sizeof(unsigned int));
+        //Send(sock, ciphertext, ciphLen);
+        int p = Send(ssl, ciphertext, ciphLen);
+        char *d = malloc(ciphLen);
+        aes(key, ciphertext, ciphLen, d, 0);
+        printf("decrypt\n%s\n", d);
+    }
+    //send file (with iv prepended if valid) and hash to server
+    //send(sock, ciphertext, ciphLen, 0);
+    //Send(sock, hashBuff, strlen(hashBuff));
+    printf("\nhash: %s\n", hashBuff);
+    printf("transfer of %s complete", fileName);
+}
+
+void handleGetRequest(char *fileName, int encrypted, char *pswd, SSL *ssl)
+{
+
+    //recv file
+    //decrypt if need be
+    //compute hash
+    //hash(txt, buf)
+    //compare
+    //if valid, write that shit to directory
+    //not valid, display msg to user
+    printf("handling get request\n");
+
+
+    printf("retrieval of %s complete", fileName);
 }
 
 int main(int argc,char **argv)
@@ -152,121 +279,22 @@ int main(int argc,char **argv)
     if(strcasecmp(peer_CN, host))
         printf("comm name does not match host name");
 */
-    char buf[1000];
-    SSL_read(ssl, buf, sizeof(buf)-1);
-    printf("%s\n", buf);
 
-    //get peer certificate?
-    //peer_cert = SSL_get_peer_certificate(ssl);
-    
-    //BIO_set_ssl(sbio, &ssl, BIO_NOCLOSE);
-    /*
-    if(!ssl) {
-        printf("ssl\n");
+    printf(">>");
+    while(1) {
+        if(fgets(requestLine, sizeof(requestLine), stdin) == NULL)
+            printError("something wrong with getting stdin");
+        requestLine[strlen(requestLine)] = '\0';
+        char *stop;
+        stop = "stop";
+        if(strcmp(requestLine, stop) == 0)
+            break;
+        printf("parsing request: %s\n", requestLine);
+        parseRequest(requestLine, ssl);
+        printf(">>");
     }
 
-        printf("k\n");
-    //SSL_set_mode(ssl, SSL_MODE_AUTO_RETRY);
-    bbio = BIO_new(BIO_f_buffer());
-        printf("j\n");
-    sbio = BIO_push(bbio, sbio);
-        printf("i\n");
-    acpt = BIO_new_accept(port);
-
-        printf("h\n");
-    BIO_set_accept_bios(acpt, sbio);
-
-        printf("g\n");
-    out = BIO_new_fp(stdout, BIO_NOCLOSE);
-        printf("f\n");
-
-    if(BIO_do_accept(acpt) <= 0)
-        printf("poop");
-        printf("e\n");
-
-    if(BIO_do_accept(acpt) <= 0)
-        printf("poop");
-        printf("c\n");
-    sbio = BIO_pop(acpt);
-        printf("d\n");
-    BIO_free_all(acpt);
-        printf("b\n");
-    if(BIO_do_handshake(sbio)<=0)
-        printf("whatever");
-    
-        printf("a\n");
-        */
-   /* 
-
-    con->ssl = SSL_new(con->ctx);
-    SSL_set_accept_state(con->ssl);
-    SSL_set_verify(con->ssl, SSL_VERIFY_PEER, verify_callback);
-    SSL_set_session_id_context(con->ssl, sid, 4);
-
-    con->write = BIO_new_ssl_connect(con->ctx);
-    con->read = BIO_new_fp(stdout, BIO_NOCLOSE);
-    BIO_set_conn_port(port);
-    SSL_set_bio(con->ssl, con->read, con->write);
-    */
-/*
-    const SSL_METHOD *method = SSLv23_method();
-    if(method == NULL)
-        die("method() failure");
-    if((ctx = SSL_CTX_new(method))==NULL)
-        die("new method fail");
-    
-    SSL_CTX_set_verify(ctx, SSL_VERIFY_PEER, verify_callback);
-    SSL_CTX_set_verify_depth(ctx, 5);
-
-    const long flags = SSL_OP_ALL | SSL_OP_NO_SSLv2 | SSL_OP_NO_SSLv3 | SSL_OP_NO_COMPRESSION;
-    long old_opts = SSL_CTX_set_options(ctx, flags);
-    
-    SSL_CTX_load_verify_locations(ctx, "random-org-chain.pem", NULL);
-    
-    web = BIO_new_ssl_connect(ctx);
-    char b[20];
-    sprintf(b, "%s:%d", HOSTNAME, HOST_PORT);
-    res = BIO_set_conn_hostname(web, b);
-    BIO_get_ssl(web, &ssl);
-    res = SSL_set_cipher_list(ssl, PREFERRED_CIPHERS);
-    res = SSL_set_tlsext_host_name(ssl, HOSTNAME);
-    out = BIO_new_fp(stdout, BIO_NOCLOSE);
-    res = BIO_do_connect(web);
-    res = BIO_do_handshake(web);
-
-
-    //NOW THE X509 VERIFICATION
-    X509 * cert = SSL_get_peer_certificate(ssl);
-    if(cert) { X509_free(cert);}
-
-
-    res = SSL_get_verify_result(ssl);
-    if(X509_V_OK != res)
-        printf("not verified\n");
-    //still need to verify that this is the correct hostname
-    
-
-    //reading and writing to BIO
-    BIO_puts(web, "GET " HOST_RESOURCE " HTTP/1.1\r\nHost: " HOSTNAME "\r\nConnection: close\r\n\r\n");
-    BIO_puts(out, "\nFetching: " HOST_RESOURCE "\n\n");
-    
-
-    int len = 0;
-    do {
-        char buff[1536] = {};
-        len = BIO_read(web, buff, sizeof(buff));
-        printf("gettin stuffff\n");
-        if(len > 0)
-            BIO_write(out, buff, len);
-    } while(len > 0 || BIO_should_retry(web));
-    if(out)
-        BIO_free(out);
-    if(web != NULL)
-        BIO_free_all(web);
-    if(ctx != NULL)
-        SSL_CTX_free(ctx);
-    return res;
-    */
+   
 }
 
 

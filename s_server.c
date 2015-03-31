@@ -55,6 +55,71 @@ int create_client_sock(int portno)
     return sockfd;
 }
 
+void handlePut(char *filename, SSL *ssl)
+{
+    unsigned int sizeNet, size;
+    char *data, hashBuf[2048/8];
+    // recv SHA256 of data
+    int x = Recv(ssl, hashBuf, 64);
+    hashBuf[x] = '\0';
+
+    // recv size of data that is to be written to file 
+    Recv(ssl, &sizeNet, sizeof(unsigned int));
+    size = ntohs(sizeNet);
+    data = malloc(size);
+    
+    //recv file data
+    Recv(ssl, data, size);//-1);
+    //data[size] = '\0';
+
+    //now write the data to file
+    FILE *writef = fopen(filename, "wb");
+    fwrite(data, size, 1, writef);
+    fclose(writef);
+    free(data);
+
+    //append .sha256 to filename
+    char shafile[strlen(filename) + strlen(".sha256")];
+    strcpy(shafile, filename);
+    strcat(shafile, ".sha256");
+    //write hash to {filename}.sha256
+    FILE *sha256 = fopen(shafile, "wb");
+    fwrite(hashBuf, 64, 1, sha256);
+    fclose(sha256);
+}
+
+void handleRequest(char *request, SSL *ssl)
+{
+    int isPut, isEnc;
+    char *token_seperators = "\t \r\n";
+    char *method = "";
+    char *requestFile = "";
+    char *mode = "";
+    char *pswd = "";
+    
+    method = strtok(request, token_seperators);
+    requestFile = strtok(NULL, token_seperators);
+    mode = strtok(NULL, token_seperators);
+    pswd = strtok(NULL, token_seperators);
+    printf("request %s\n", request);
+
+    if(strcmp(method, "get") == 0) {
+        isPut = 0;
+    }
+    else {
+        isPut = 1;
+    }
+    if(strcmp(mode, "N") == 0) {
+        isEnc = 0;
+    }
+    else {
+        isEnc = 1;
+    }
+    handlePut(requestFile, ssl);
+    
+}
+
+
 
 void init_libs() {
     (void)SSL_library_init();
@@ -132,135 +197,59 @@ int main(int argc,char **argv)
     //SSL_set_session_id_context(ssl, sid, 4);
     //sbio = BIO_new_ssl(ctx, 0);
     listen(sock, 5);
+    for(;;) {
+        struct sockaddr_in client_addr;
+        int clntlen, clntSock;
+        clntSock = accept(sock, (struct sockaddr *)&client_addr, (socklen_t *)&clntlen);
+        if(clntSock < 0)
+            exit(1);
+        printf("accepted client\n");
 
-    struct sockaddr_in client_addr;
-    int clntlen, clntSock;
-    clntSock = accept(sock, (struct sockaddr *)&client_addr, (socklen_t *)&clntlen);
-    if(clntSock < 0)
-        exit(1);
-    printf("accepted client\n");
-
-    sbio = BIO_new(BIO_s_socket());
-    BIO_set_fd(sbio, clntSock, BIO_NOCLOSE);
-    SSL_set_bio(ssl, sbio, sbio);
+        sbio = BIO_new(BIO_s_socket());
+        BIO_set_fd(sbio, clntSock, BIO_NOCLOSE);
+        SSL_set_bio(ssl, sbio, sbio);
+        
+        //handshake on server
+        SSL_accept(ssl);
+        char buf[1000];
+        while(SSL_read(ssl, buf, sizeof(buf) - 1) > 0) {
+            if(strlen(request) < 1)
+                continue;
+            request[y] = '\0'; 
+            printf("request: %s\n", request);
+            int isPut, isEnc;
+            char *token_seperators = "\t \r\n";
+            char *method = "";
+            char *requestFile = "";
+            char *mode = "";
+            char *pswd = "";
     
-    //handshake on server
-    SSL_accept(ssl);
-    char buf[1000];
-    sprintf(buf, "stuff im sending");
-    SSL_write(ssl, buf, strlen(buf));
+            method = strtok(request, token_seperators);
+            requestFile = strtok(NULL, token_seperators);
+            mode = strtok(NULL, token_seperators);
+            pswd = strtok(NULL, token_seperators);
 
-    //get peer certificate?
-    //peer_cert = SSL_get_peer_certificate(ssl);
-    
-    //BIO_set_ssl(sbio, &ssl, BIO_NOCLOSE);
-    /*
-    if(!ssl) {
-        printf("ssl\n");
+            if(strcmp(method, "get") == 0) {
+                isPut = 0;
+            }
+            else {
+                isPut = 1;
+            }
+            if(strcmp(mode, "N") == 0) {
+                isEnc = 0;
+            }
+            else {
+                isEnc = 1;
+            }
+            handlePut(requestFile, ssl);
+            
+            printf("done handling clnt\n");
+        }
+
+        //get peer certificate?
+        //peer_cert = SSL_get_peer_certificate(ssl);
     }
-
-        printf("k\n");
-    //SSL_set_mode(ssl, SSL_MODE_AUTO_RETRY);
-    bbio = BIO_new(BIO_f_buffer());
-        printf("j\n");
-    sbio = BIO_push(bbio, sbio);
-        printf("i\n");
-    acpt = BIO_new_accept(port);
-
-        printf("h\n");
-    BIO_set_accept_bios(acpt, sbio);
-
-        printf("g\n");
-    out = BIO_new_fp(stdout, BIO_NOCLOSE);
-        printf("f\n");
-
-    if(BIO_do_accept(acpt) <= 0)
-        printf("poop");
-        printf("e\n");
-
-    if(BIO_do_accept(acpt) <= 0)
-        printf("poop");
-        printf("c\n");
-    sbio = BIO_pop(acpt);
-        printf("d\n");
-    BIO_free_all(acpt);
-        printf("b\n");
-    if(BIO_do_handshake(sbio)<=0)
-        printf("whatever");
     
-        printf("a\n");
-        */
-   /* 
-
-    con->ssl = SSL_new(con->ctx);
-    SSL_set_accept_state(con->ssl);
-    SSL_set_verify(con->ssl, SSL_VERIFY_PEER, verify_callback);
-    SSL_set_session_id_context(con->ssl, sid, 4);
-
-    con->write = BIO_new_ssl_connect(con->ctx);
-    con->read = BIO_new_fp(stdout, BIO_NOCLOSE);
-    BIO_set_conn_port(port);
-    SSL_set_bio(con->ssl, con->read, con->write);
-    */
-/*
-    const SSL_METHOD *method = SSLv23_method();
-    if(method == NULL)
-        die("method() failure");
-    if((ctx = SSL_CTX_new(method))==NULL)
-        die("new method fail");
-    
-    SSL_CTX_set_verify(ctx, SSL_VERIFY_PEER, verify_callback);
-    SSL_CTX_set_verify_depth(ctx, 5);
-
-    const long flags = SSL_OP_ALL | SSL_OP_NO_SSLv2 | SSL_OP_NO_SSLv3 | SSL_OP_NO_COMPRESSION;
-    long old_opts = SSL_CTX_set_options(ctx, flags);
-    
-    SSL_CTX_load_verify_locations(ctx, "random-org-chain.pem", NULL);
-    
-    web = BIO_new_ssl_connect(ctx);
-    char b[20];
-    sprintf(b, "%s:%d", HOSTNAME, HOST_PORT);
-    res = BIO_set_conn_hostname(web, b);
-    BIO_get_ssl(web, &ssl);
-    res = SSL_set_cipher_list(ssl, PREFERRED_CIPHERS);
-    res = SSL_set_tlsext_host_name(ssl, HOSTNAME);
-    out = BIO_new_fp(stdout, BIO_NOCLOSE);
-    res = BIO_do_connect(web);
-    res = BIO_do_handshake(web);
-
-
-    //NOW THE X509 VERIFICATION
-    X509 * cert = SSL_get_peer_certificate(ssl);
-    if(cert) { X509_free(cert);}
-
-
-    res = SSL_get_verify_result(ssl);
-    if(X509_V_OK != res)
-        printf("not verified\n");
-    //still need to verify that this is the correct hostname
-    
-
-    //reading and writing to BIO
-    BIO_puts(web, "GET " HOST_RESOURCE " HTTP/1.1\r\nHost: " HOSTNAME "\r\nConnection: close\r\n\r\n");
-    BIO_puts(out, "\nFetching: " HOST_RESOURCE "\n\n");
-    
-
-    int len = 0;
-    do {
-        char buff[1536] = {};
-        len = BIO_read(web, buff, sizeof(buff));
-        printf("gettin stuffff\n");
-        if(len > 0)
-            BIO_write(out, buff, len);
-    } while(len > 0 || BIO_should_retry(web));
-    if(out)
-        BIO_free(out);
-    if(web != NULL)
-        BIO_free_all(web);
-    if(ctx != NULL)
-        SSL_CTX_free(ctx);
-    return res;
-    */
 }
 
 

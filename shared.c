@@ -26,10 +26,11 @@ char *randomNum(char *pswd)
     return randnum;
 }
 
-int Recv(int sock, void *buf, int size)
+int Recv(SSL *ssl, void *buf, int size)
 {
+
     ssize_t result;
-    result = recv(sock, buf, size, 0);
+    result = SSL_read(ssl, buf, size);
     if(result < 0) {
         perror("recv() failed");
         if(errno == ECONNRESET) {
@@ -42,10 +43,10 @@ int Recv(int sock, void *buf, int size)
 
 }
 
-int Send(int sock, void *data, int size)
+int Send(SSL *ssl, void *data, int size)
 {
     ssize_t result;
-    result = send(sock, data, size, 0);
+    result = SSL_write(ssl, data, size);
     if(result != size) {
         perror("send() failed");
         return -1;
