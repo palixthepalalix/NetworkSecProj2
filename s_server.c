@@ -43,7 +43,7 @@ int create_client_sock(int portno)
     struct sockaddr_in serv_addr;
     sockfd = socket(AF_INET, SOCK_STREAM, 0);
     if(sockfd<0) {
-        exit(1);
+        die("socket error");
     }
     bzero((char *)&serv_addr, sizeof(serv_addr));
 
@@ -51,7 +51,7 @@ int create_client_sock(int portno)
     serv_addr.sin_addr.s_addr = INADDR_ANY;
     serv_addr.sin_port = htons(portno);
     if(bind(sockfd, (struct sockaddr *) &serv_addr, sizeof(serv_addr)) < 0)
-        exit(1);
+        die("bind() error");
     return sockfd;
 }
 
@@ -129,7 +129,8 @@ void init_libs() {
     OPENSSL_config(NULL);
 }
 void die(char *msg) {
-    printf("%s\n", msg);
+    perror( msg);
+    exit(1);
 }
 
 
@@ -196,13 +197,15 @@ int main(int argc,char **argv)
 
     //SSL_set_session_id_context(ssl, sid, 4);
     //sbio = BIO_new_ssl(ctx, 0);
-    listen(sock, 5);
+    if(listen(sock, 5) < 0)
+        die("listen() failed");
     for(;;) {
+        printf("back to accepting\n");
         struct sockaddr_in client_addr;
         int clntlen, clntSock;
         clntSock = accept(sock, (struct sockaddr *)&client_addr, (socklen_t *)&clntlen);
         if(clntSock < 0)
-            exit(1);
+            die("failed accept");
         printf("accepted client\n");
 
         sbio = BIO_new(BIO_s_socket());
@@ -212,8 +215,13 @@ int main(int argc,char **argv)
         //handshake on server
         SSL_accept(ssl);
         char request[1000];
-        while(SSL_read(ssl, request, sizeof(request) - 1) > 0) {
-            if(strlen(request) < 1)
+        int s = 0;
+        while((s = SSL_read(ssl, request, sizeof(request) - 1)) > 0) {
+            printf("a\n");
+            request[s] = '\0';
+            printf("%d\n", (int)strlen(request));
+            printf("s %d\n", s);
+            if(strlen(request) != s)
                 continue;
             printf("request: %s\n", request);
             int isPut, isEnc;

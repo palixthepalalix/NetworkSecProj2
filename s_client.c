@@ -31,6 +31,9 @@ const char *PREFERRED_CIPHERS = "HIGH:!aNULL:!kRSA:!SRP:!PSK:!CAMELLIA:!RC4:!MD5
 int verify_callback(int preverify, X509_STORE_CTX* x509_ctx);
 void print_san_name(const char* label, X509* const cert);
 void print_cn_name(const char* label, X509_NAME* const name);
+void handlePut(char *fileName, int encrypted, char *pswd, SSL *ssl);
+void handleGet(char *fileName, int encrypted, char *pswd, SSL *ssl);
+
 #define HOSTNAME "www.random.org"
 #define HOST_RESOURCE "/cgi-bin/randbyte?nbytes=32&format=h"
 #define PRIVATE_KEY "sprivate.pem"
@@ -137,9 +140,9 @@ void parseRequest(char *request, SSL *ssl)
     Send(ssl, (void *)reqPack, strlen(reqPack));
     printf("hi\n");
     if(putRequest)
-        handlePutRequest(requestFile, encrypted, pswd, ssl);
+        handlePut(requestFile, encrypted, pswd, ssl);
     else
-        handleGetRequest(requestFile, encrypted, pswd, ssl);
+        handleGet(requestFile, encrypted, pswd, ssl);
 }
 
 void makeKey(char *pswd, char *buf)
@@ -147,7 +150,7 @@ void makeKey(char *pswd, char *buf)
     strcpy(buf, "1234567890123456");
 }
 
-void handlePutRequest(char *fileName, int encrypted, char *pswd, SSL *ssl)
+void handlePut(char *fileName, int encrypted, char *pswd, SSL *ssl)
 {
     //generate SHA256 hash of plaintext file
 
@@ -186,8 +189,8 @@ void handlePutRequest(char *fileName, int encrypted, char *pswd, SSL *ssl)
     }
     else if(encrypted) {
         //encrypt this shit
-        char *key;
-        key = getrand(pswd);
+        char *key = malloc(16 * sizeof(char *) + 1);;
+        randKey(pswd, key);
         
         printf("password: %s\n", pswd);
         ciphertext = malloc(fsize + 256); // size of file plus aes block size
@@ -210,7 +213,7 @@ void handlePutRequest(char *fileName, int encrypted, char *pswd, SSL *ssl)
     printf("transfer of %s complete", fileName);
 }
 
-void handleGetRequest(char *fileName, int encrypted, char *pswd, SSL *ssl)
+void handleGet(char *fileName, int encrypted, char *pswd, SSL *ssl)
 {
 
     //recv file
