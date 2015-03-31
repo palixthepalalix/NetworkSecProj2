@@ -28,6 +28,25 @@ static void printError(const char *err)
     printf("ERROR: %s\n", err);
 }
 
+char *getrand(char *password)
+{
+    char *r = malloc(16 * sizeof(char *) +1);
+    int i, len;
+    int seed = atoi(password);
+    srand(seed);
+    memset(r, 0, 16);
+    for(i = 0; i < 16; i++) {
+        int y = rand() % 10;
+        char buf[2];
+        sprintf(buf, "%d", y);
+        strcat(r, buf);
+        printf("%s\n", r);
+    }
+    r[16] = '\0';
+    return r;
+}
+
+
 int connect_to_server(char *address, char *port)
 {
     int sockfd, n, portno;
@@ -164,11 +183,13 @@ void handlePutRequest(char *fileName, int encrypted, char *pswd, int sock)
     }
     else if(encrypted) {
         //encrypt this shit
-        char *k = randomNum("hello");;
+        char *key;
+        key = getrand(pswd);
+        
         printf("password: %s\n", pswd);
         ciphertext = malloc(fsize + 256); // size of file plus aes block size
         //gotta prepend that mutha fuggin IV
-        ciphLen = aes(k, ftext, fsize, ciphertext, 1);
+        ciphLen = aes(key, ftext, fsize, ciphertext, 1);
         sendSize = htons(ciphLen+1);
         
         printf("ciphlen %d\n", ciphLen);
@@ -176,7 +197,7 @@ void handlePutRequest(char *fileName, int encrypted, char *pswd, int sock)
         //Send(sock, ciphertext, ciphLen);
         int p = Send(sock, ciphertext, ciphLen);
         char *d = malloc(ciphLen);
-        aes(k, ciphertext, ciphLen, d, 0);
+        aes(key, ciphertext, ciphLen, d, 0);
         printf("decrypt\n%s\n", d);
     }
     //send file (with iv prepended if valid) and hash to server

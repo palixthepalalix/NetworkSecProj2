@@ -42,6 +42,40 @@ int create_client_sock(int portno)
     return sockfd;
 }    
 
+void handlePut(char *filename, int clntsock)
+{
+    unsigned int sizeNet, size;
+    char *data, hashBuf[2048/8];
+    // recv SHA256 of data
+    int x = Recv(clntsock, hashBuf, 64);
+    hashBuf[x] = '\0';
+
+    // recv size of data that is to be written to file 
+    Recv(clntsock, &sizeNet, sizeof(unsigned int));
+    size = ntohs(sizeNet);
+    data = malloc(size);
+    
+    //recv file data
+    Recv(clntsock, data, size);//-1);
+    //data[size] = '\0';
+
+    //now write the data to file
+    FILE *writef = fopen(filename, "wb");
+    fwrite(data, size, 1, writef);
+    fclose(writef);
+    free(data);
+
+    //append .sha256 to filename
+    char shafile[strlen(filename) + strlen(".sha256")];
+    strcpy(shafile, filename);
+    strcat(shafile, ".sha256");
+    //write hash to {filename}.sha256
+    FILE *sha256 = fopen(shafile, "wb");
+    fwrite(hashBuf, 64, 1, sha256);
+    fclose(sha256);
+}
+
+
 /*
 void RecvFile(char *filename, int clntsock)
 {
@@ -94,7 +128,7 @@ void handleRequest(char *request, int sock)
     else {
         isEnc = 1;
     }
-    RecvFile(requestFile, sock, isEnc, pswd);
+    handlePut(requestFile, sock);
     
 }
 
@@ -152,7 +186,7 @@ int main(int argc, char **argv)
             else {
                 isEnc = 1;
             }
-            RecvFile(requestFile, clntSock, isEnc, pswd);
+            handlePut(requestFile, clntSock);
             
             printf("done handling clnt\n");
         }
