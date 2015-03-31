@@ -1,3 +1,6 @@
+#include <openssl/ssl.h>
+#include <openssl/bio.h>
+
 #define MAX_FILESIZE 1000000
 
 struct Data {
@@ -12,8 +15,8 @@ struct Header {
 };
 
 
-int Recv(int sock, void *data, int size);
-int Send(int sock, void *data, int size);
+int Recv(SSL *ssh, void *data, int size);
+int Send(SSL *ssh, void *data, int size);
 int validateHash(char hashval[], char *data);
 int RecvFile(char *filename, int sock, int encrypted, char *pswd);
 char *randKey(char *password, char *k);
