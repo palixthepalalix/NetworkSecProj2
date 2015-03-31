@@ -3,12 +3,16 @@
 # makefile
 
 CC=gcc
-CFLAGS=-I.
+CFLAGS=-Wno-deprecated -Wno-deprecated-declarations -I.
 DEPS = aes.h hash.h shared.h
 OBJCL1 = openssl-bio-fetch.o
 OBJSER = openssl-server.o
 OBJsserv = s_server.o aes.o hash.o shared.o
 OBJcli = s_client.o aes.o hash.o shared.o
+OBJtest = aeslib.o hash.o shared.o
+TESTCLI = testclient.o $(OBJtest)
+TESTSER = testserver.o $(OBJtest)
+
 
 EXE = s_server s_client
 LIBS = -lcrypto -lssl
@@ -19,6 +23,8 @@ LIBS = -lcrypto -lssl
 		$(CC) -c -o $@ $< $(CFLAGS)
 
 all: $(EXE) 
+
+test: testserver testclient
 
 openssl-bio-fetch: $(OBJCL1)
 		gcc -o $@ $^ $(CFLAGS) $(LIBS)
@@ -32,7 +38,11 @@ s_server: $(OBJsserv)
 s_client: $(OBJcli)
 		gcc -o $@ $^ $(CFLAGS) $(LIBS)
 
-server: $(OBJSER) 
+testclient: $(TESTCLI)
+		gcc -o $@ $^ $(CFLAGS) $(LIBS)
+
+
+testserver: $(TESTSER) 
 		gcc -o $@ $^ $(CFLAGS) $(LIBS)
 
 csr: 
