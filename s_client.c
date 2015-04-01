@@ -26,6 +26,7 @@
 #include <openssl/x509v3.h>
 #include <openssl/opensslconf.h>
 #include "aeslib.h"
+#define BUFSIZE 512
 
 const char *PREFERRED_CIPHERS = "HIGH:!aNULL:!kRSA:!SRP:!PSK:!CAMELLIA:!RC4:!MD5:!DSS";
 
@@ -143,24 +144,26 @@ void parseRequest(char *request, SSL *ssl)
     printf("trying to print request\n");
     printf("%s\n", reqPack);
     strcat(reqPack, "\n");
-    Send(ssl, (void *)reqPack, strlen(reqPack));
+    char b[BUFSIZE];
+    strcpy(b, reqPack);
+    SSL_write(ssl, b, sizeof(b));
     printf("hi\n");
 
     if(putRequest) {
         if(encrypted) {
-            enc_put(ssl, filename, pswd);
+            enc_put(ssl, requestFile, pswd);
 
         }
         else{
-            put(ssl, filename);
+            put(ssl, requestFile);
         }
     }
     else {
         if(encrypted) {
-            enc_get(ssl, filename, pswd);
+            enc_get(ssl, requestFile, pswd);
         }
         else{
-            get(ssl, filename);
+            get(ssl, requestFile);
         }
     }
 }
@@ -171,12 +174,12 @@ void makeKey(char *pswd, char *buf)
 }
 
 void enc_put(SSL *ssl, char *filename, char *password) {
-    har buffer[512];
+    char buffer[512];
     FILE *infile = fopen(filename, "rb");
     int n;
     int datasize = 0;
     aesenc(infile, ssl, password);
-    close(infile);
+    fclose(infile);
     
     char hashBuf[2048/8];
     FILE *rfp = fopen(filename, "rb");
@@ -197,13 +200,17 @@ void put(SSL *ssl, char *filename) {
     FILE *infile = fopen(filename, "rb");
     int n;
     int datasize = 0;
+    printf("NOW PUTTING DATA\n");
 
+    printf("writing\n");
     while((n = fread(buffer, sizeof(buffer), 1, infile))>0) {
+        printf("%s\n", buffer);
     
         SSL_write(ssl, buffer, sizeof(buffer));
         memset(buffer, 0, sizeof(buffer));
         datasize+=n;
     }
+    printf("done writing\n");
     fclose(infile);
     
     char hashBuf[2048/8];
@@ -212,7 +219,9 @@ void put(SSL *ssl, char *filename) {
     fread(data, sizeof(data), 1, rfp);
     fclose(rfp);
     hash(data, hashBuf);
+    printf("writinghash\n");
     SSL_write(ssl, hashBuf, 65);
+    printf("donewritinghash\n");
 }
 
 void enc_get(SSL *ssl, char *filename, char *password) {
@@ -220,7 +229,7 @@ void enc_get(SSL *ssl, char *filename, char *password) {
     FILE *outfile = fopen(filename, "wb");
     int n;
     int datasize = 0;
-    aesdec(ssh, outfile, password);
+    aesdec(ssl, outfile, password);
     fclose(outfile);
     FILE *rfp = fopen(filename, "rb");
     fseek(rfp, 0, SEEK_END);
@@ -249,13 +258,17 @@ void get(SSL *ssl, char *filename) {
     FILE *outfile = fopen(filename, "wb");
     int n;
     int datasize = 0;
+    printf("GETTING DATA\n");
 
+    printf("reding\n");
     while((n = SSL_read(ssl, buffer, sizeof(buffer)))>0) {
+        printf("%s", buffer);
         
         fwrite(buffer, sizeof(buffer), 1, outfile);
         datasize+=n;
         memset(buffer, 0, sizeof(buffer));
     }
+    printf("donereding\n");
     fclose(outfile);
     FILE *rfp = fopen(filename, "rb");
     char *data = malloc(datasize + 1);
@@ -263,7 +276,10 @@ void get(SSL *ssl, char *filename) {
     fclose(rfp);
     char hashBuf[2048/8], hashver[2048/8];
 
+    printf("redinghash\n");
     SSL_read(ssl, hashBuf, 65);
+
+    printf("donereding\n");
 
     if(validateHash(hashBuf, data) == 1) {
         printf("valid hash\n");
@@ -278,6 +294,7 @@ void get(SSL *ssl, char *filename) {
 void handlePut(char *fileName, int encrypted, char *pswd, SSL *ssl)
 {
     //generate SHA256 hash of plaintext file
+    /*
     chdir("clientfiles");
 
     printf("handling put request\n");
@@ -339,11 +356,12 @@ void handlePut(char *fileName, int encrypted, char *pswd, SSL *ssl)
     printf("\nhash: %s\n", hashBuff);
     printf("transfer of %s complete", fileName);
     chdir("../");
+    */
 }
 
 void handleGet(char *fileName, int encrypted, char *pswd, SSL *ssl)
 {
-
+/*
     //recv hash file
     char hashBuf[2048/8];
     int x = Recv(ssl, hashBuf, 65);
@@ -411,6 +429,7 @@ void handleGet(char *fileName, int encrypted, char *pswd, SSL *ssl)
 
 
     printf("retrieval of %s complete", fileName);
+    */
 }
 
 int main(int argc,char **argv)

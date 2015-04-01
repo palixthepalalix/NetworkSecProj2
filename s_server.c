@@ -36,10 +36,15 @@ void print_cn_name(const char* label, X509_NAME* const name);
 #define HOST_RESOURCE "/cgi-bin/randbyte?nbytes=32&format=h"
 #define PRIVATE_KEY "sprivate.pem"
 #define CERTIFICATE "scert.pem"
+#define BUFSIZE 512
 
-void serv_put(SSL *ssl, filename);
-void serv_get(SSL *ssl, filename);
+void serv_put(SSL *ssl, char *filename);
+void serv_get(SSL *ssl, char *filename);
 
+void die(char *msg) {
+    perror( msg);
+    exit(1);
+}
 
 int create_client_sock(int portno)
 {
@@ -59,17 +64,22 @@ int create_client_sock(int portno)
     return sockfd;
 }
 
-void serv_get(SSL *ssl, filename){
+void serv_get(SSL *ssl, char *filename){
+    chdir("serverfiles");;
+    printf("SERVER IS TRANSMITTING GET FILE\n");
     char buffer[512];
     FILE *infile = fopen(filename, "rb");
     int n;
     int datasize = 0;
 
+    printf("writing\n");
     while((n = fread(buffer, sizeof(buffer), 1, infile))>0) {
+        printf("%s", buffer);
     
         SSL_write(ssl, buffer, sizeof(buffer));
         memset(buffer, 0, sizeof(buffer));
     }
+    printf("done\n");
     fclose(infile);
     
     char hashBuf[2048/8];
@@ -81,28 +91,38 @@ void serv_get(SSL *ssl, filename){
     fwrite(hashBuf, 65, 1, sha);
     hashBuf[64] = '\0';
     fclose(sha);
+    printf("write hashbuf\n");
     SSL_write(ssl, hashBuf, 65);
+    printf("done write hashbuf\n");
+    chdir("../");
 
 }
-void serv_put(SSL *ssl, filename) {
+void serv_put(SSL *ssl, char *filename) {
+    chdir("serverfiles");
+    printf("SERVER IS RECIEVING PUT FILE\n");
     char buffer[512];
     FILE *outfile = fopen(filename, "wb");
     int n;
     int datasize = 0;
 
+    printf("waiting on read data\n");
     while((n = SSL_read(ssl, buffer, sizeof(buffer)))>0) {
+        printf("%s", buffer);
         
         fwrite(buffer, sizeof(buffer), 1, outfile);
         datasize+=n;
         memset(buffer, 0, sizeof(buffer));
     }
+    printf("done reading data\n");
     fclose(outfile);
     FILE *rfp = fopen(filename, "rb");
     char *data = malloc(datasize + 1);
     fread(data, sizeof(data), 1, rfp);
     fclose(rfp);
     char hashBuf[2048/8];
+    printf("reading hash buf data\n");
     SSL_read(ssl, hashBuf, 65);
+    printf("done reading hash buf data\n");
 
     char shafname[strlen(filename) + strlen(".sha256") + 1];
     sprintf(shafname, "%s.sha256", filename);
@@ -112,10 +132,12 @@ void serv_put(SSL *ssl, filename) {
     fclose(sha);
 
     free(data);
+    chdir("../");
 }
 
 void handlePut(char *filename, SSL *ssl)
 {
+    /*
     chdir("serverfiles");
     unsigned int sizeNet, size;
     char *data, hashBuf[2048/8];
@@ -147,10 +169,12 @@ void handlePut(char *filename, SSL *ssl)
     fwrite(hashBuf, 64, 1, sha256);
     fclose(sha256);
     chdir("../");
+    */
 }
 
 void handleGet(char *filename, SSL *ssl)
 {
+    /*
     chdir("serverfiles");
     char shafile[strlen(filename) + strlen(".sha256")];
     char *data;
@@ -179,6 +203,7 @@ void handleGet(char *filename, SSL *ssl)
     Send(ssl, data, sendSize);
     free(data);
     chdir("../");
+    */
  
 }
 
@@ -221,10 +246,6 @@ void init_libs() {
     SSL_load_error_strings();
 
     OPENSSL_config(NULL);
-}
-void die(char *msg) {
-    perror( msg);
-    exit(1);
 }
 
 
@@ -308,10 +329,11 @@ int main(int argc,char **argv)
         
         //handshake on server
         SSL_accept(ssl);
-        char request[1000];
+        char request[BUFSIZE];
         int s = 0;
-        while((s = SSL_read(ssl, request, sizeof(request) - 1)) > 0) {
+        while((s = SSL_read(ssl, request, sizeof(request))) > 0) {
             request[s] = '\0';
+            printf("s %d, strlen %d", s, strlen(request));
             if(strlen(request) != s)
                 continue;
             printf("request: %s\n", request);
@@ -340,9 +362,9 @@ int main(int argc,char **argv)
                 isEnc = 1;
             }
             if(isPut) 
-                serv_put(requestFile, ssl);
+                serv_put(ssl, requestFile);
             else
-                serv_get(requestFile, ssl);
+                serv_get( ssl, requestFile);
             
             printf("done handling clnt\n");
         }

@@ -1,5 +1,6 @@
 #include <stdio.h>
 #include <string.h>
+#include <openssl/ssl.h>
 
 #define min(a, b)   ((a < b) ? a : b)
 
@@ -650,12 +651,11 @@ int aesenc(FILE *infp, SSL *ssl, char *key)
 	return 0;
 }
 
-int aesdec(SSH *ssh, FILE *outfile, char *key)
+int aesdec(SSL *ssl, FILE *outfile, char *key)
 {
-	infp
+	
     int n;
 	long len;
-    char key[512] = {0};
     char buffer[512];
 //    FILE *infp, *outfp;
 	/*
@@ -703,7 +703,7 @@ int aesdec(SSH *ssh, FILE *outfile, char *key)
 		 * the last block may be padded with 0x00s so we have to
 		 * determine how many bytes we have to take from it
 		 */
-		fwrite(buffer, (n > len) ? len : n, 1, outfp);
+		fwrite(buffer, (n > len) ? len : n, 1, outfile);
 		/*
 		 * calculate how many bytes still are required
 		 */
