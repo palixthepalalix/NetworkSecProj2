@@ -41,3 +41,5 @@ int decryptCBC(unsigned char *input, int len, unsigned char *key,
  * character at the end to ensure compatibility
  */
 void trimKey(char *key);
+int aesdec(SSH *ssh, FILE *outfile, char *key);
+int aesenc(FILE *infp, SSL *ssl, char *key);

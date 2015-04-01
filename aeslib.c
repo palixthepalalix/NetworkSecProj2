@@ -587,3 +587,134 @@ void trimKey(char *key)
         }
     }
 }
+
+int aesenc(FILE *infp, SSL *ssl, char *key)
+{
+    long len;
+    char buffer[512];
+	/*
+	 * ensure you use the same initialization vector
+	 * for encryption and decrpytion
+	 */
+    unsigned char iv[] = {
+        0x22, 0x10, 0x19, 0x64,
+        0x10, 0x19, 0x64, 0x22,
+        0x19, 0x64, 0x22, 0x10,
+        0x64, 0x22, 0x10, 0x19
+    };
+
+    trimKey(key);
+
+	/*
+	 * output file starts with a 512-byte header
+	 * containing magic number "ACBC"
+	 * followed by a blank and the original length of the inut file
+	 * the rest of the file contains a number of 512 byte blocks
+	 * of ciphertext, last block is padded with 0x00
+	 */
+	memset(buffer, 0, sizeof(buffer));
+
+	/*
+	 * determine length of input file by setting fp to eof
+	 * and reading the file position
+	 */
+	fseek(infp, 0, SEEK_END);
+	len = ftell(infp);
+	/*
+	 * set fp back to bof
+	 */
+	fseek(infp, 0, SEEK_SET);
+
+	/*
+	 * set magic number and length and write header to output file
+	 */
+	sprintf(buffer, "ACBC %ld", len);
+	SSL_write(ssl, buffer, sizeof(buffer));
+
+	while (fread(buffer, sizeof(buffer), 1, infp) > 0) {
+		/*
+		 * encrypt 512 byte block
+		 */
+		encryptCBC((unsigned char*)buffer, sizeof(buffer), 
+				   (unsigned char*)key, strlen(key), iv);
+		/*
+		 * write block to output file
+		 */
+		SSL_write(ssl, buffer, sizeof(buffer));
+		memset(buffer, 0, sizeof(buffer));
+
+		/*
+		 * check for I/O errors
+		 */
+	}	
+	return 0;
+}
+
+int aesdec(SSH *ssh, FILE *outfile, char *key)
+{
+	infp
+    int n;
+	long len;
+    char key[512] = {0};
+    char buffer[512];
+//    FILE *infp, *outfp;
+	/*
+	 * ensure you use the same initialization vector
+	 * for encryption and decrpytion
+	 */
+    unsigned char iv[] = {
+        0x22, 0x10, 0x19, 0x64,
+        0x10, 0x19, 0x64, 0x22,
+        0x19, 0x64, 0x22, 0x10,
+        0x64, 0x22, 0x10, 0x19
+    };
+ 
+	
+    trimKey(key);
+
+	/*
+	 * read file header, check magic number
+	 * and get length of original input file
+	 */
+	SSL_read(ssl, buffer, sizeof(buffer));
+	if (memcmp(buffer, "ACBC ", 5) != 0) {
+		printf("error: wrong input file format\n");
+		exit(1);
+	}
+	sscanf(buffer, "ACBC %ld", &len);
+
+    while ((n = SSL_read(ssl, buffer, sizeof(buffer)))>0) {
+		/*
+		 * read 512 byte block
+		 */
+        n = SSL_read(ssl, buffer, sizeof(buffer));
+		if (len < 0) {
+			/*
+			 * we're done already so we just read until EOF
+			 */
+			continue;
+		}
+		/*
+		 * decrypt block
+		 */
+		decryptCBC((unsigned char *)buffer, sizeof(buffer), 
+				   (unsigned char *)key, strlen(key), iv);
+		/*
+		 * the last block may be padded with 0x00s so we have to
+		 * determine how many bytes we have to take from it
+		 */
+		fwrite(buffer, (n > len) ? len : n, 1, outfp);
+		/*
+		 * calculate how many bytes still are required
+		 */
+		len -= n;
+		memset(buffer, 0, sizeof(buffer));
+
+		/*
+		 * check for I/O errors
+		 */
+		
+    }
+
+	return 0;
+}

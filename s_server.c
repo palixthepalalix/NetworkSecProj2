@@ -25,6 +25,7 @@
 #include <openssl/buffer.h>
 #include <openssl/x509v3.h>
 #include <openssl/opensslconf.h>
+#include "aeslib.h"
 
 const char *PREFERRED_CIPHERS = "HIGH:!aNULL:!kRSA:!SRP:!PSK:!CAMELLIA:!RC4:!MD5:!DSS";
 
@@ -35,6 +36,9 @@ void print_cn_name(const char* label, X509_NAME* const name);
 #define HOST_RESOURCE "/cgi-bin/randbyte?nbytes=32&format=h"
 #define PRIVATE_KEY "sprivate.pem"
 #define CERTIFICATE "scert.pem"
+
+void serv_put(SSL *ssl, filename);
+void serv_get(SSL *ssl, filename);
 
 
 int create_client_sock(int portno)
@@ -53,6 +57,61 @@ int create_client_sock(int portno)
     if(bind(sockfd, (struct sockaddr *) &serv_addr, sizeof(serv_addr)) < 0)
         die("bind() error");
     return sockfd;
+}
+
+void serv_get(SSL *ssl, filename){
+    char buffer[512];
+    FILE *infile = fopen(filename, "rb");
+    int n;
+    int datasize = 0;
+
+    while((n = fread(buffer, sizeof(buffer), 1, infile))>0) {
+    
+        SSL_write(ssl, buffer, sizeof(buffer));
+        memset(buffer, 0, sizeof(buffer));
+    }
+    fclose(infile);
+    
+    char hashBuf[2048/8];
+
+    char shafname[strlen(filename) + strlen(".sha256") + 1];
+    sprintf(shafname, "%s.sha256", filename);
+
+    FILE *sha = fopen(shafname, "rb");
+    fwrite(hashBuf, 65, 1, sha);
+    hashBuf[64] = '\0';
+    fclose(sha);
+    SSL_write(ssl, hashBuf, 65);
+
+}
+void serv_put(SSL *ssl, filename) {
+    char buffer[512];
+    FILE *outfile = fopen(filename, "wb");
+    int n;
+    int datasize = 0;
+
+    while((n = SSL_read(ssl, buffer, sizeof(buffer)))>0) {
+        
+        fwrite(buffer, sizeof(buffer), 1, outfile);
+        datasize+=n;
+        memset(buffer, 0, sizeof(buffer));
+    }
+    fclose(outfile);
+    FILE *rfp = fopen(filename, "rb");
+    char *data = malloc(datasize + 1);
+    fread(data, sizeof(data), 1, rfp);
+    fclose(rfp);
+    char hashBuf[2048/8];
+    SSL_read(ssl, hashBuf, 65);
+
+    char shafname[strlen(filename) + strlen(".sha256") + 1];
+    sprintf(shafname, "%s.sha256", filename);
+
+    FILE *sha = fopen(shafname, "wb");
+    fwrite(hashBuf, strlen(hashBuf), 1, sha);
+    fclose(sha);
+
+    free(data);
 }
 
 void handlePut(char *filename, SSL *ssl)
@@ -281,9 +340,9 @@ int main(int argc,char **argv)
                 isEnc = 1;
             }
             if(isPut) 
-                handlePut(requestFile, ssl);
+                serv_put(requestFile, ssl);
             else
-                handleGet(requestFile, ssl);
+                serv_get(requestFile, ssl);
             
             printf("done handling clnt\n");
         }

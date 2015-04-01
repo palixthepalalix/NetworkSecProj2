@@ -25,6 +25,7 @@
 #include <openssl/buffer.h>
 #include <openssl/x509v3.h>
 #include <openssl/opensslconf.h>
+#include "aeslib.h"
 
 const char *PREFERRED_CIPHERS = "HIGH:!aNULL:!kRSA:!SRP:!PSK:!CAMELLIA:!RC4:!MD5:!DSS";
 
@@ -33,6 +34,11 @@ void print_san_name(const char* label, X509* const cert);
 void print_cn_name(const char* label, X509_NAME* const name);
 void handlePut(char *fileName, int encrypted, char *pswd, SSL *ssl);
 void handleGet(char *fileName, int encrypted, char *pswd, SSL *ssl);
+void enc_put(SSL *ssl, char *filename, char *password);
+void enc_get(SSL *ssl, char *filename, char *password);
+void put(SSL *ssl, char *filename);
+void get(SSL *ssl, char *filename);
+
 
 #define HOSTNAME "www.random.org"
 #define HOST_RESOURCE "/cgi-bin/randbyte?nbytes=32&format=h"
@@ -139,15 +145,134 @@ void parseRequest(char *request, SSL *ssl)
     strcat(reqPack, "\n");
     Send(ssl, (void *)reqPack, strlen(reqPack));
     printf("hi\n");
-    if(putRequest)
-        handlePut(requestFile, encrypted, pswd, ssl);
-    else
-        handleGet(requestFile, encrypted, pswd, ssl);
+
+    if(putRequest) {
+        if(encrypted) {
+            enc_put(ssl, filename, pswd);
+
+        }
+        else{
+            put(ssl, filename);
+        }
+    }
+    else {
+        if(encrypted) {
+            enc_get(ssl, filename, pswd);
+        }
+        else{
+            get(ssl, filename);
+        }
+    }
 }
 
 void makeKey(char *pswd, char *buf)
 {
     strcpy(buf, "1234567890123456");
+}
+
+void enc_put(SSL *ssl, char *filename, char *password) {
+    har buffer[512];
+    FILE *infile = fopen(filename, "rb");
+    int n;
+    int datasize = 0;
+    aesenc(infile, ssl, password);
+    close(infile);
+    
+    char hashBuf[2048/8];
+    FILE *rfp = fopen(filename, "rb");
+    fseek(rfp, 0, SEEK_END);
+    datasize = ftell(rfp);
+    fseek(rfp, 0, SEEK_SET);
+    char *data = malloc(datasize + 1);
+    fread(data, sizeof(data), 1, rfp);
+    fclose(rfp);
+    hash(data, hashBuf);
+    SSL_write(ssl, hashBuf, 65);
+    free(data);
+
+}
+
+void put(SSL *ssl, char *filename) {
+    char buffer[512];
+    FILE *infile = fopen(filename, "rb");
+    int n;
+    int datasize = 0;
+
+    while((n = fread(buffer, sizeof(buffer), 1, infile))>0) {
+    
+        SSL_write(ssl, buffer, sizeof(buffer));
+        memset(buffer, 0, sizeof(buffer));
+        datasize+=n;
+    }
+    fclose(infile);
+    
+    char hashBuf[2048/8];
+    FILE *rfp = fopen(filename, "rb");
+    char *data = malloc(datasize + 1);
+    fread(data, sizeof(data), 1, rfp);
+    fclose(rfp);
+    hash(data, hashBuf);
+    SSL_write(ssl, hashBuf, 65);
+}
+
+void enc_get(SSL *ssl, char *filename, char *password) {
+    char buffer[512], hashBuf[2048/8];
+    FILE *outfile = fopen(filename, "wb");
+    int n;
+    int datasize = 0;
+    aesdec(ssh, outfile, password);
+    fclose(outfile);
+    FILE *rfp = fopen(filename, "rb");
+    fseek(rfp, 0, SEEK_END);
+    datasize = ftell(rfp);
+    fseek(rfp, 0, SEEK_SET);
+    char *data = malloc(datasize + 1);
+    fread(data, sizeof(data), 1, rfp);
+    fclose(rfp);
+
+    SSL_read(ssl, hashBuf, 65);
+
+    if(validateHash(hashBuf, data) == 1) {
+        printf("valid hash\n");
+    }
+    else {
+        printf("hash not valid\n");
+    }
+
+    free(data);
+
+}
+
+void get(SSL *ssl, char *filename) {
+    //just recieve file and hash and verify
+    char buffer[512];
+    FILE *outfile = fopen(filename, "wb");
+    int n;
+    int datasize = 0;
+
+    while((n = SSL_read(ssl, buffer, sizeof(buffer)))>0) {
+        
+        fwrite(buffer, sizeof(buffer), 1, outfile);
+        datasize+=n;
+        memset(buffer, 0, sizeof(buffer));
+    }
+    fclose(outfile);
+    FILE *rfp = fopen(filename, "rb");
+    char *data = malloc(datasize + 1);
+    fread(data, sizeof(data), 1, rfp);
+    fclose(rfp);
+    char hashBuf[2048/8], hashver[2048/8];
+
+    SSL_read(ssl, hashBuf, 65);
+
+    if(validateHash(hashBuf, data) == 1) {
+        printf("valid hash\n");
+    }
+    else {
+        printf("hash not valid\n");
+    }
+
+    free(data);
 }
 
 void handlePut(char *fileName, int encrypted, char *pswd, SSL *ssl)
